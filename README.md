@@ -22,28 +22,40 @@ npm run compositions -- src/index.ts
 
 Lista los reels disponibles con su duración.
 
+```bash
+npm run timing
+```
+
+Comprueba, tramo por tramo, si lo que hay que decir cabe en el tiempo que tiene. Calcula a 2,8 palabras por segundo, que es un ritmo natural en castellano. Sirve para detectar antes de grabar que una frase no entra, en lugar de descubrirlo montando.
+
 ## Cómo se escribe un reel
 
-Un archivo por reel en `src/scripts/`. Ver `corazon3d.ts` como ejemplo. La estructura:
+Un archivo por reel en `src/scripts/`. Ver `corazon3d.ts` como ejemplo.
 
-- **`hook`**: los tres primeros segundos, literales. Es la parte que decide el alcance, por eso tiene su propia sección y va siempre primero.
-- **`beats`**: cada momento del vídeo, con su texto en pantalla, su duración en segundos y su plano.
-- **`cta`**: lo que se le pide al espectador al final.
+Un reel es una lista de secciones en el orden que tú decidas, sin molde fijo. En el del corazón 3D, por ejemplo, el CTA va en medio y el reveal cierra el vídeo. Cada sección lleva:
+
+- **`label`**: el nombre de la sección en tu guion, como "HOOK" o "REVEAL FINAL".
+- **`voiceover`**: lo que dices, palabra por palabra. Se omite en las secciones sin voz.
+- **`text`**: el rótulo que va quemado en la imagen. Los reels se ven sin sonido, así que suele ser la misma frase acortada.
+- **`shot`**: el plano que hay que grabar.
+- **`seconds`**: cuánto dura la sección.
 
 Después hay que añadirlo a la lista `SCRIPTS` de `src/Root.tsx`.
 
 ## Grabar después de montar, no antes
 
-Un beat sin `clip` no rompe nada: dibuja un recuadro con el plano que falta por grabar. Eso permite **ver el reel entero, con sus tiempos reales, antes de grabar nada**, y cada recuadro dice exactamente qué falta.
+Una sección sin `clip` no rompe nada: dibuja un recuadro con el plano que falta por grabar y la frase que hay que decir. Eso permite **ver el reel entero, con sus tiempos reales, antes de grabar nada**, y cada recuadro funciona como guion de rodaje.
 
-Cuando el clip esté grabado, se guarda en `public/clips/` y se añade al beat:
+Cuando el clip esté grabado, se guarda en `public/clips/` y se añade a la sección:
 
 ```ts
 {
-  text: "Lo monto en el ordenador y lo giro",
-  clip: "clips/modelado.mp4",
+  label: "BENEFICIO 1 · Iluminación y ángulo",
+  voiceover: "Lo bueno del 3D es que decido exactamente la iluminación y el ángulo que quiero.",
+  text: "Decido la luz y el ángulo exactos",
+  clip: "clips/render.mp4",
   clipStart: 2,        // opcional: desde qué segundo del clip empezar
-  seconds: 4,
+  seconds: 7,
 }
 ```
 

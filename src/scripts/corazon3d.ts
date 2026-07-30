@@ -1,44 +1,60 @@
 import type { ReelScript } from "../types";
 
 /**
- * Her 3D metallic heart idea. The trick comes first and unexplained: the rotating heart
- * on the leg cannot be understood at a glance, and that confusion is what holds people
- * past the third second.
+ * Narrativa escrita por Mariona. Se respeta su estructura y sus tiempos tal cual:
+ * gancho, dos beneficios separados, disponibilidad, CTA en medio, reveal al final y loop.
  */
 export const corazon3d: ReelScript = {
   id: "corazon-3d",
-  hook: "Esto todavía no es un tatuaje",
-  hookSeconds: 3,
-  hookShot: "Pierna del cliente con el corazón 3D rotando encima, como si ya estuviera tatuado",
 
-  beats: [
+  sections: [
     {
-      text: "Es un corazón metálico modelado en 3D",
-      shot: "Mismo plano, quitando el efecto para romper la ilusión",
+      label: "HOOK",
       seconds: 3,
+      voiceover:
+        "Esto no es un tatuaje, es el modelo 3D de un diseño que tatué hace poco. Resultado al final del video.",
+      text: "Esto no es un tatuaje",
+      shot: "Corazón 3D rotando sobre piel, luego corte a claramente 3D",
     },
     {
-      text: "Lo monto en el ordenador y lo giro",
-      shot: "Time-lapse del modelado 3D, acelerado",
-      seconds: 4,
+      label: "BENEFICIO 1 · Iluminación y ángulo",
+      seconds: 7,
+      voiceover: "Lo bueno del 3D es que decido exactamente la iluminación y el ángulo que quiero.",
+      text: "Decido la luz y el ángulo exactos",
+      shot: "Render del corazón con cambios de iluminación y rotaciones",
     },
     {
-      text: "Hasta que el metal parece metal de verdad",
-      shot: "Detalle de pantalla: los reflejos cambiando",
-      seconds: 3.5,
+      label: "BENEFICIO 2 · Reutilización",
+      seconds: 8,
+      voiceover: "Y con el mismo modelo, saco varios diseños distintos.",
+      text: "Con el mismo modelo, varios diseños",
+      shot: "Mini-montaje rápido de 3 o 4 ángulos y variaciones del mismo modelo",
     },
     {
-      text: "Así ves el resultado antes de tocarte la piel",
-      shot: "Tú trabajando frente al ordenador, plano medio",
-      seconds: 3.5,
+      label: "DISPONIBILIDAD",
+      seconds: 10,
+      voiceover: "Estos son los diseños que saqué. Este de aquí, por cierto, aún está disponible.",
+      text: "Este todavía está disponible",
+      shot: "Grid de los diseños sacados, y close-up del que sigue libre",
     },
     {
-      text: "Y solo entonces lo imprimo para tatuar",
-      shot: "Diseño impreso en papel de tatuar, primer plano",
-      seconds: 3,
+      label: "CTA",
+      seconds: 7,
+      voiceover:
+        "Si te interesa un proyecto así de personalizado, escríbeme por Instagram contándome tu idea y la zona del cuerpo.",
+      text: "Escríbeme con tu idea y la zona",
+      shot: "Tú a cámara, mirando directo",
+    },
+    {
+      label: "REVEAL FINAL",
+      seconds: 15,
+      // Sin voz en off: solo el impacto visual.
+      shot: "Tatuaje terminado con buena luz, zoom lento",
+    },
+    {
+      label: "LOOP",
+      seconds: 2,
+      shot: "Vuelve al frame inicial del hook: corazón tatuado en la misma pose del render",
     },
   ],
-
-  cta: "¿Os enseño el resultado tatuado?\nDecídmelo en comentarios",
-  ctaSeconds: 3,
 };

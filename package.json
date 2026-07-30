@@ -2,11 +2,13 @@
   "name": "reels",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "description": "Reels de @kaos.realm montados por código con Remotion",
   "scripts": {
     "studio": "remotion studio",
     "render": "remotion render",
-    "compositions": "remotion compositions"
+    "compositions": "remotion compositions",
+    "timing": "node --experimental-strip-types src/checkTiming.ts"
   },
   "dependencies": {
     "@remotion/cli": "4.0.502",
