@@ -4,8 +4,8 @@ public/clips/
 .remotion/
 
 # heavy video/font assets, not source
-reels/*.mp4
-reels/*.MP4
-reels/subs_work/*.mp4
+VIDEO_REELS/*.mp4
+VIDEO_REELS/*.MP4
+VIDEO_REELS/subs_work/*.mp4
 public/*.ttc
 public/*.otf
