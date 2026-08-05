@@ -1,0 +1,1 @@
+[1:a]adelay=|,volume=0.9[sw1];[1:a]adelay=|,volume=0.9[sw2];[1:a]adelay=|,volume=0.9[sw3];[1:a]adelay=|,volume=0.9[sw4];[1:a]adelay=|,volume=0.9[sw5];[1:a]adelay=|,volume=0.9[sw6];[1:a]adelay=|,volume=0.9[sw7];[1:a]adelay=|,volume=0.9[sw8];[0:a][sw1][sw2][sw3][sw4][sw5][sw6][sw7][sw8]amix=inputs=9:duration=first:normalize=0[aout]
