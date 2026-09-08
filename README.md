@@ -59,6 +59,19 @@ Cuando el clip esté grabado, se guarda en `public/clips/` y se añade a la secc
 }
 ```
 
+## `plantillas.html` — montaje por plantilla, sin código
+
+Alternativa al flujo de Remotion para los reels de siempre. Es un único HTML: se abre en el navegador y no necesita instalar nada.
+
+Se elige una plantilla (**Top**, Frase viral, Humor, Proceso, Emocional, Sorteo), que ya trae los cortes y su duración, y solo hay que soltar los vídeos en cada hueco. Los huecos vacíos salen en negro, así que el reel se ve entero antes de tener todo grabado — la misma idea que los recuadros de Remotion.
+
+**Dos pistas independientes.** Los cortes de imagen y los subtítulos van por separado: una frase puede aguantar 2 o 3 cortes seguidos, que es como se leen los reels de verdad. Se arrastran en la línea de tiempo y hacen *snap* a los cortes.
+
+**Subtítulos karaoke** en el verde lima y el magenta de la cuenta, palabra por palabra, con el handle siempre debajo. Una palabra entre asteriscos —`Los *3* tatuajes`— se dibuja más grande y más pesada.
+
+Publicado también como artifact, que es donde funcionan la escritura de subtítulos con IA y la descarga del vídeo exportado:
+https://claude.ai/code/artifact/2bfaceac-4dc3-47d4-8d2d-3eb82f8e3eab
+
 ## Decisiones de formato
 
 - **1080x1920 a 30 fps**: lo que aceptan Instagram y TikTok sin reconvertir.
