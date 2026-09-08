@@ -72,6 +72,46 @@ Se elige una plantilla (**Top**, Frase viral, Humor, Proceso, Emocional, Sorteo)
 Publicado también como artifact, que es donde funcionan la escritura de subtítulos con IA y la descarga del vídeo exportado:
 https://claude.ai/code/artifact/2bfaceac-4dc3-47d4-8d2d-3eb82f8e3eab
 
+## `docs/` — la misma herramienta, instalada en el movil
+
+Version web de `plantillas.html`, pensada para usarla como app de edicion en el iPhone.
+Se publica con GitHub Pages y se anade a la pantalla de inicio: icono propio, pantalla
+completa y funciona sin cobertura.
+
+**Exporta en MP4, no en WebM.** Safari del iPhone no implementa `canvas.captureStream()`,
+asi que el metodo de grabar en tiempo real no existe ahi. En su lugar usa **WebCodecs**:
+recorre el reel fotograma a fotograma, lo codifica en H.264 y le pega el audio en AAC con
+`mp4-muxer`. Sale mas rapido que el tiempo real y en un formato que Instagram traga mejor.
+Si el aparato no tiene WebCodecs, cae a MediaRecorder y saca WebM.
+
+El audio se monta aparte: se decodifica el de cada clip, se mezcla sobre la linea de tiempo
+con un `OfflineAudioContext` y se codifica entero al final.
+
+Para guardarlo en el carrete usa la hoja de compartir de iOS (`navigator.share`), que ofrece
+**Guardar en Fotos**. Sin el tope de 16 MB que tiene la version artifact.
+
+La seccion **Exportar** lleva un diagnostico que dice, en el aparato que sea, que motor va a
+usar, si habra audio y como se va a guardar. Si algo no funciona en el movil, eso lo aclara.
+
+### Publicarlo
+
+En GitHub: **Settings → Pages → Source: Deploy from a branch**, rama `main`, carpeta `/docs`.
+Queda en `https://marionayongmeiferre.github.io/AI-VIDEO-EDITOR/`.
+
+### Ficheros
+
+| | |
+|---|---|
+| `index.html` | la app entera |
+| `mp4-muxer.js` | empaqueta el MP4 (32 KB, sin dependencias) |
+| `usage.js` | registro de uso local para estudiar la interfaz |
+| `sw.js` | cache para que abra sin internet |
+| `manifest.webmanifest` + iconos | lo que la convierte en app instalable |
+
+`usage.js` no manda nada a ningun sitio: se queda en localStorage del propio movil, y no
+guarda imagenes, nombres de fichero ni el texto de los subtitulos. Solo que se toca y
+cuanto tarda una exportacion. Se lee con `usageReport()` y se borra con `usageClear()`.
+
 ## Decisiones de formato
 
 - **1080x1920 a 30 fps**: lo que aceptan Instagram y TikTok sin reconvertir.

@@ -1,0 +1,21 @@
+{
+  "name": "kaos.realm Plantillas",
+  "short_name": "kaos.realm",
+  "description": "Montaje de reels por plantilla: cortes fijos, subtitulos karaoke y exportacion a MP4.",
+  "lang": "es",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "id": "kaos-realm-plantillas",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#141110",
+  "theme_color": "#141110",
+  "categories": ["photo", "video", "productivity"],
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
