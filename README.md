@@ -93,6 +93,20 @@ Para guardarlo en el carrete usa la hoja de compartir de iOS (`navigator.share`)
 La seccion **Exportar** lleva un diagnostico que dice, en el aparato que sea, que motor va a
 usar, si habra audio y como se va a guardar. Si algo no funciona en el movil, eso lo aclara.
 
+### Lo que trae de mas que la version artifact
+
+- **Recorte por clip**: desde que segundo del fichero entra cada hueco. Sin esto habia que
+  recortar antes en otra app.
+
+- **Volumen por clip y general**, con silenciar. Se aplica igual en la vista previa que en el
+  MP4 exportado.
+
+- **Guias de Instagram** sobre la vista previa: la franja que tapa su interfaz, calculada desde
+  `SAFE` de `src/theme.ts`. Solo se ven en pantalla, nunca se graban.
+
+- **Aviso de ritmo**: si una frase pasa de 2,8 palabras por segundo no da tiempo a leerla, y el
+  bloque se marca en la linea de tiempo.
+
 ### Publicarlo
 
 En GitHub: **Settings → Pages → Source: Deploy from a branch**, rama `main`, carpeta `/docs`.
