@@ -211,6 +211,22 @@ textarea,input[type=text]{font-size:16px;}
 @media(display-mode:standalone){
   body{position:fixed;inset:0;overflow-y:auto;width:100%;}
 }
+/* teleprompter a pantalla completa mientras graba la voz */
+.tp{position:fixed;inset:0;z-index:200;background:rgba(10,8,8,.97);display:flex;
+  flex-direction:column;align-items:center;justify-content:center;gap:18px;
+  padding:calc(24px + env(safe-area-inset-top)) 22px calc(24px + env(safe-area-inset-bottom));}
+.tp-count{font-family:var(--display);font-size:70px;color:var(--lime);line-height:1;}
+.tp-now{font-family:var(--cap);font-weight:900;font-size:clamp(26px,7.5vw,46px);
+  color:var(--lime);text-align:center;line-height:1.2;max-width:16ch;
+  text-shadow:0 3px 18px rgba(0,0,0,.9);}
+.tp-next{font-family:var(--cap);font-weight:700;font-size:clamp(13px,3.4vw,18px);
+  color:var(--paper-faint);text-align:center;max-width:22ch;min-height:1.4em;}
+.tp-bar{width:min(420px,90%);height:4px;border-radius:4px;background:var(--ink-3);overflow:hidden;}
+.tp-bar i{display:block;height:100%;background:var(--magenta);width:0%;}
+.tp-time{font-size:var(--t-s);font-weight:800;color:var(--paper-dim);font-variant-numeric:tabular-nums;}
+.tp-acts{display:flex;gap:10px;}
+.btn-record{background:var(--magenta);border-color:var(--magenta);color:#fff;}
+body.tp-on{overflow:hidden;}
 .stagebar{display:flex;align-items:center;gap:9px;width:100%;max-width:246px;}
 .stagebar .mvol{flex:1;accent-color:var(--lime);min-width:0;}
 .stagebar .btn{padding:7px 11px;font-size:var(--t-xs);min-height:0;}
@@ -349,8 +365,23 @@ textarea,input[type=text]{font-size:16px;}
         </details>
       </section>
 
+      <section class="section lockable" id="secVoz">
+        <div class="step"><span class="step-n">5</span><h2 class="section-title">Voz en off</h2></div>
+        <p class="section-hint">El guión se desplaza solo al ritmo del reel. Tú solo lees.</p>
+        <div class="btn-row">
+          <button class="btn btn-record" style="flex:1" id="voRecBtn">Grabar voz en off</button>
+          <button class="btn btn-sm hidden" id="voDel">Borrar</button>
+        </div>
+        <div class="dur-row hidden" id="voMix" style="margin-top:11px">
+          <input type="range" id="voVol" min="0" max="1.5" step="0.05" value="1" aria-label="Volumen de la voz">
+          <span class="dur-val" id="voVolV">100%</span>
+          <button class="btn btn-sm" id="voMute">Silenciar</button>
+        </div>
+        <div class="note" id="voNote" role="status"></div>
+      </section>
+
       <section class="section" style="border-bottom:none">
-        <div class="step"><span class="step-n">5</span><h2 class="section-title">Exportar</h2></div>
+        <div class="step"><span class="step-n">6</span><h2 class="section-title">Exportar</h2></div>
         <p class="section-hint">Se graba en tiempo real: tarda <b id="expDur">lo que dure el reel</b>.</p>
         <div class="btn-row">
           <button class="btn btn-primary" style="flex:1" id="exportBtn">Exportar vídeo</button>
@@ -367,6 +398,17 @@ textarea,input[type=text]{font-size:16px;}
 <input type="file" id="fileOne" accept="video/*,image/*" class="hidden">
 <input type="file" id="fileBulk" accept="video/*,image/*" multiple class="hidden">
 <input type="file" id="fileLogo" accept="image/*" class="hidden">
+<div class="tp" id="tp" hidden>
+  <div class="tp-count" id="tpCount"></div>
+  <div class="tp-now" id="tpNow"></div>
+  <div class="tp-next" id="tpNext"></div>
+  <div class="tp-bar"><i id="tpBar"></i></div>
+  <div class="tp-time" id="tpTime"></div>
+  <div class="tp-acts">
+    <button class="btn btn-lime" id="tpStop">Terminar</button>
+    <button class="btn" id="tpCancel">Descartar</button>
+  </div>
+</div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 
@@ -472,7 +514,7 @@ const TEMPLATES={
 
 /* ===================== STATE ===================== */
 const DEF=()=>({tpl:'viral',clips:[],subs:[],idea:'',kStyle:'color',
-  base:BRAND.lime,hi:BRAND.magenta,pos:0.54,masterVol:1,guides:true,
+  base:BRAND.lime,hi:BRAND.magenta,pos:0.54,masterVol:1,guides:true,vo:{vol:1,mute:false},
   wm:{on:true,handle:'@kaos.realm',hasLogo:false}});
 let state=DEF();
 let selKind='clip', selIdx=0, logoImg=null;
@@ -500,13 +542,16 @@ function normalizar(){
   }
   if(typeof state.masterVol!=='number'||!isFinite(state.masterVol))state.masterVol=1;
   if(typeof state.guides!=='boolean')state.guides=true;
+  if(!state.vo||typeof state.vo!=='object')state.vo={vol:1,mute:false};
+  if(typeof state.vo.vol!=='number'||!isFinite(state.vo.vol))state.vo.vol=1;
+  state.vo.mute=!!state.vo.mute;
 }
 /* el volumen del <video> en la vista previa */
 function applyVol(i){
   const m=media[i];
   if(!m||m.kind!=='video')return;
   try{
-    const v=clipVol(state.clips[i]);
+    const v=grabandoVoz?0:clipVol(state.clips[i]);
     m.el.volume=Math.max(0,Math.min(1,v));
     m.el.muted=v<=0;
   }catch(e){}
@@ -827,12 +872,17 @@ function startPlayback(){
   if(playhead>=totalDur()-0.02)playhead=0;
   playing=true;startOffset=playhead;startPerf=performance.now();curClip=-1;
   const{i,local}=clipAt(playhead);syncClipVideo(i,local);
+  if(voEl&&!grabandoVoz&&voVol()>0){
+    try{voEl.currentTime=Math.min(playhead,voEl.duration||playhead);
+        voEl.volume=Math.min(1,voVol());voEl.play().catch(()=>{});}catch(e){}
+  }
   $('playIco').setAttribute('d','M6 4h4v16H6zM14 4h4v16h-4z');
   $('playBtn').setAttribute('aria-label','Pausar');
   rafId=requestAnimationFrame(tick);
 }
 function stopPlayback(){
   playing=false;cancelAnimationFrame(rafId);
+  if(voEl)try{voEl.pause();}catch(e){}
   const m=media[curClip];
   if(m&&m.kind==='video')try{m.el.pause();}catch(e){}
   curClip=-1;
@@ -1294,6 +1344,25 @@ wmSw.addEventListener('click',()=>{
 });
 $('wmHandle').addEventListener('input',e=>{state.wm.handle=e.target.value;drawFrame(playhead);save();});
 $('ideaBox').addEventListener('input',e=>{state.idea=e.target.value;save();});
+$('voRecBtn').addEventListener('click',empezarVoz);
+$('tpStop').addEventListener('click',()=>pararVoz(true));
+$('tpCancel').addEventListener('click',()=>pararVoz(false));
+$('voDel').addEventListener('click',async()=>{
+  await cargarVoz(null);dbDel('vo');renderVoz();save();
+  $('voNote').className='note';$('voNote').textContent='';
+  toast('Voz borrada.');
+});
+$('voVol').addEventListener('input',e=>{
+  state.vo.vol=parseFloat(e.target.value);
+  $('voVolV').textContent=Math.round(state.vo.vol*100)+'%';
+  if(voEl)voEl.volume=Math.min(1,voVol());
+});
+$('voVol').addEventListener('change',save);
+$('voMute').addEventListener('click',()=>{
+  state.vo.mute=!state.vo.mute;renderVoz();
+  if(voEl)voEl.volume=Math.min(1,voVol());
+  save();
+});
 $('guidesBtn').addEventListener('click',()=>{
   state.guides=!state.guides;
   $('guidesBtn').setAttribute('aria-pressed',String(state.guides));
@@ -1403,6 +1472,167 @@ $('aiBtn').addEventListener('click',async()=>{
       c==='cancelled'?'Cancelado.':'No se pudieron generar los subtítulos.');
   }finally{btn.disabled=false;btn.textContent='Escribir subtítulos con IA';}
 });
+
+
+/* ===================== VOZ EN OFF + TELEPROMPTER =====================
+   Graba su voz mientras el guion se desplaza solo al ritmo de la linea de
+   tiempo. Como los subtitulos ya tienen su propio momento y duracion, el
+   teleprompter no necesita velocidad: va pegado al reloj del reel, asi que
+   lo que graba encaja con lo que se vera.
+   El audio se guarda en IndexedDB junto a los clips y se mezcla al exportar. */
+let voBlob=null,voEl=null,voRec=null,voChunks=[],grabandoVoz=false,voStream=null;
+
+function voVol(){
+  if(!state.vo||state.vo.mute)return 0;
+  const v=(typeof state.vo.vol==='number'&&isFinite(state.vo.vol))?state.vo.vol:1;
+  return Math.max(0,Math.min(2,v));
+}
+function tieneVoz(){return !!voBlob;}
+
+async function cargarVoz(blob){
+  if(voEl){try{voEl.pause();URL.revokeObjectURL(voEl.src);}catch(e){}}
+  voBlob=blob||null;
+  voEl=null;
+  if(!blob)return;
+  const url=URL.createObjectURL(blob);
+  voEl=document.createElement('audio');
+  voEl.src=url;voEl.preload='auto';
+  await new Promise(r=>{
+    const ok=()=>r();
+    voEl.addEventListener('loadedmetadata',ok,{once:true});
+    voEl.addEventListener('error',ok,{once:true});
+    setTimeout(ok,4000);
+  });
+  voEl.volume=Math.min(1,voVol());
+}
+
+function mimeVoz(){
+  const opciones=['audio/mp4','audio/webm;codecs=opus','audio/webm','audio/aac'];
+  for(const m of opciones)if(window.MediaRecorder&&MediaRecorder.isTypeSupported(m))return m;
+  return '';
+}
+
+/* --- el teleprompter --- */
+function tpTexto(t){
+  const s=subAt(t);
+  let sig=null,mejor=Infinity;
+  for(const x of state.subs){
+    if(x.s>t&&x.s-t<mejor){mejor=x.s-t;sig=x;}
+  }
+  return {ahora:s?s.t:'',siguiente:sig?sig.t:''};
+}
+function limpiaAsteriscos(x){return (x||'').replace(/\*/g,'');}
+function pintaTp(t){
+  const{ahora,siguiente}=tpTexto(t);
+  $('tpNow').textContent=limpiaAsteriscos(ahora)||'…';
+  $('tpNext').textContent=limpiaAsteriscos(siguiente);
+  const total=totalDur()||1;
+  $('tpBar').style.width=Math.min(100,t/total*100)+'%';
+  $('tpTime').textContent=Math.max(0,Math.ceil(total-t))+'s';
+}
+
+async function empezarVoz(){
+  if(grabandoVoz||exporting)return;
+  const note=$('voNote');
+  note.className='note';note.textContent='';
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    note.className='note note-warn';note.textContent='Este navegador no da acceso al micrófono.';return;
+  }
+  if(!window.MediaRecorder){
+    note.className='note note-warn';note.textContent='Este navegador no puede grabar audio.';return;
+  }
+  try{
+    voStream=await navigator.mediaDevices.getUserMedia({
+      audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}
+    });
+  }catch(e){
+    note.className='note note-warn';
+    note.textContent=(e&&e.name==='NotAllowedError')
+      ?'No has dado permiso al micrófono. Ajustes → Safari → Micrófono.'
+      :'No se pudo abrir el micrófono.';
+    return;
+  }
+  const mime=mimeVoz();
+  try{voRec=mime?new MediaRecorder(voStream,{mimeType:mime}):new MediaRecorder(voStream);}
+  catch(e){
+    note.className='note note-warn';note.textContent='Este navegador no puede grabar audio.';
+    soltarMicro();return;
+  }
+  voChunks=[];
+  voRec.ondataavailable=e=>{if(e.data.size>0)voChunks.push(e.data);};
+
+  /* cuenta atras antes de empezar, que si no siempre se pierde la primera palabra */
+  $('tp').hidden=false;
+  document.body.classList.add('tp-on');
+  stopPlayback();playhead=0;curClip=-1;
+  pintaTp(0);
+  for(let n=3;n>0;n--){
+    $('tpCount').textContent=String(n);
+    await sleep(700);
+    if(!$('tp').hidden===false)break;
+  }
+  $('tpCount').textContent='';
+
+  grabandoVoz=true;
+  applyVolAll();                 /* los clips se callan para que no se cuelen en el micro */
+  voRec.start(200);
+  usage('voz_start',{seg:Math.round(totalDur())});
+  startPlayback();
+  bucleTp();
+}
+function bucleTp(){
+  if(!grabandoVoz)return;
+  pintaTp(playhead);
+  requestAnimationFrame(bucleTp);
+}
+function soltarMicro(){
+  if(voStream){try{voStream.getTracks().forEach(t=>t.stop());}catch(e){}voStream=null;}
+}
+async function pararVoz(guardar){
+  if(!grabandoVoz)return;
+  grabandoVoz=false;
+  stopPlayback();
+  $('tp').hidden=true;
+  document.body.classList.remove('tp-on');
+  const note=$('voNote');
+  try{
+    await new Promise(res=>{
+      if(!voRec||voRec.state==='inactive')return res();
+      voRec.onstop=res;voRec.stop();
+    });
+  }catch(e){}
+  soltarMicro();
+  applyVolAll();
+  if(!guardar||!voChunks.length){
+    voChunks=[];
+    note.className='note';note.textContent='Grabación descartada.';
+    renderVoz();return;
+  }
+  const blob=new Blob(voChunks,{type:voChunks[0].type||'audio/mp4'});
+  voChunks=[];
+  await cargarVoz(blob);
+  dbPut('vo',blob);
+  state.vo=state.vo||{vol:1,mute:false};
+  save();renderVoz();
+  note.className='note note-ok';
+  note.textContent='Voz grabada ('+(blob.size/1024/1024).toFixed(1)+' MB).';
+  toast('Voz en off lista.');
+  usage('voz_ok',{mb:+(blob.size/1048576).toFixed(2)});
+}
+
+function renderVoz(){
+  const hay=tieneVoz();
+  $('voRecBtn').textContent=hay?'Regrabar voz':'Grabar voz en off';
+  $('voDel').classList.toggle('hidden',!hay);
+  $('voMix').classList.toggle('hidden',!hay);
+  if(hay){
+    const v=state.vo||{vol:1,mute:false};
+    $('voVol').value=String(v.vol==null?1:v.vol);
+    $('voVolV').textContent=v.mute?'muda':Math.round((v.vol==null?1:v.vol)*100)+'%';
+    $('voMute').textContent=v.mute?'Activar':'Silenciar';
+    $('voVol').disabled=!!v.mute;
+  }
+}
 
 /* ===================== EXPORT =====================
    Dos motores, se elige el que soporte el aparato:
@@ -1529,6 +1759,25 @@ async function buildAudioBuffer(total){
       }catch(e){}
     }
     at+=d;
+  }
+  /* la voz en off va encima de todo, desde el segundo cero */
+  if(voBlob&&voVol()>0){
+    try{
+      const ab=await voBlob.arrayBuffer();
+      const buf=await new Promise((res,rej)=>{
+        const p=tmp.decodeAudioData(ab,res,rej);
+        if(p&&p.then)p.then(res,rej);
+      });
+      if(buf&&buf.duration>0.02){
+        const src=off.createBufferSource();
+        src.buffer=buf;
+        const gain=off.createGain();
+        gain.gain.value=voVol();
+        src.connect(gain);gain.connect(off.destination);
+        src.start(0,0,Math.min(total,buf.duration));
+        any=true;
+      }
+    }catch(e){}
   }
   try{tmp.close();}catch(e){}
   if(!any)return null;
@@ -1761,12 +2010,14 @@ window.addEventListener('resize',()=>{clearTimeout(rsT);rsT=setTimeout(renderTim
   const blobs=await dbAll();
   let restored=0;
   for(const key in blobs){
-    if(key==='logo')continue;
+    if(key==='logo'||key==='vo')continue;
     const i=parseInt(key.slice(5),10);
     if(Number.isInteger(i)&&i>=0&&i<state.clips.length){
       try{await attachMedia(i,blobs[key],true);restored++;}catch(e){}
     }
   }
+  if(blobs.vo){try{await cargarVoz(blobs.vo);}catch(e){}}
+  renderVoz();
   if(state.wm.hasLogo&&blobs.logo){
     const url=URL.createObjectURL(blobs.logo);
     const im=new Image();
