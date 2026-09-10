@@ -390,6 +390,7 @@ body.tp-on{overflow:hidden;}
         <div class="progress" id="prog"><i id="progFill"></i></div>
         <div class="note" id="exportNote" role="status"></div>
         <div class="diag" id="diag"></div>
+        <button class="btn btn-sm" id="updBtn" style="margin-top:10px">Buscar actualización</button>
       </section>
     </div>
   </div>
@@ -420,6 +421,7 @@ body.tp-on{overflow:hidden;}
 const BRAND={lime:'#CCFF00',magenta:'#FF1B6B',paper:'#f6f1e9',accent:'#d2410f'};
 const SWATCHES=[BRAND.lime,BRAND.magenta,BRAND.paper,BRAND.accent,'#00E5FF','#FFFFFF'];
 const CAP_FONT='Montserrat';
+const APP_VER='2026-09-11.2';
 /* Lo que la interfaz de Instagram tapa, en proporcion (src/theme.ts sobre 1080x1920) */
 const SAFE={top:220/1920,bottom:420/1920,side:90/1080};
 const DL_LIMIT=16*1024*1024, DL_TARGET=13.5*1024*1024;
@@ -1344,6 +1346,7 @@ wmSw.addEventListener('click',()=>{
 });
 $('wmHandle').addEventListener('input',e=>{state.wm.handle=e.target.value;drawFrame(playhead);save();});
 $('ideaBox').addEventListener('input',e=>{state.idea=e.target.value;save();});
+$('updBtn').addEventListener('click',buscarActualizacion);
 $('voRecBtn').addEventListener('click',empezarVoz);
 $('tpStop').addEventListener('click',()=>pararVoz(true));
 $('tpCancel').addEventListener('click',()=>pararVoz(false));
@@ -1661,7 +1664,8 @@ function renderDiag(){
   const rows=[
     ['Motor',c.wc?'WebCodecs → MP4':(c.mr?'MediaRecorder → WebM (tiempo real)':'ninguno disponible')],
     ['Audio',c.wc?(c.aud?'sí, AAC':'no — el MP4 saldrá mudo'):(c.mr?'sí':'—')],
-    ['Guardar',downloadsFn?'descarga de Claude (tope 16 MB)':(c.share?'compartir → Guardar en Fotos':'descarga directa')]
+    ['Guardar',downloadsFn?'descarga de Claude (tope 16 MB)':(c.share?'compartir → Guardar en Fotos':'descarga directa')],
+    ['Versión',APP_VER]
   ];
   el.textContent='';
   if(navigator.storage&&navigator.storage.estimate){
@@ -1977,6 +1981,53 @@ async function finishExport(){
   }finally{finishing=false;}
 }
 
+/* ===================== ACTUALIZACIONES =====================
+   La primera version del service worker servia siempre desde la copia
+   guardada, asi que la app instalada se quedaba clavada en la version del
+   dia que se instalo y no habia forma de ver nada nuevo. Ahora la pagina
+   se pide a la red primero, y ademas aqui se vigila si hay una version
+   recien instalada para activarla y recargar sin tener que reinstalar. */
+let recargando=false;
+function arrancarSW(){
+  if(!('serviceWorker' in navigator))return;
+  const habiaControlador=!!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{
+    if(!habiaControlador||recargando)return;   /* en la primera visita no se recarga */
+    recargando=true;
+    location.reload();
+  });
+  navigator.serviceWorker.register('sw.js').then(reg=>{
+    const vigilar=sw=>{
+      if(!sw)return;
+      sw.addEventListener('statechange',()=>{
+        if(sw.state==='installed'&&navigator.serviceWorker.controller){
+          toast('Versión nueva, actualizando…');
+          try{reg.waiting&&reg.waiting.postMessage('saltar-espera');}catch(e){}
+        }
+      });
+    };
+    vigilar(reg.installing);
+    reg.addEventListener('updatefound',()=>vigilar(reg.installing));
+    if(reg.waiting)try{reg.waiting.postMessage('saltar-espera');}catch(e){}
+    setTimeout(()=>{try{reg.update();}catch(e){}},1500);
+  }).catch(()=>{});
+}
+async function buscarActualizacion(){
+  const b=$('updBtn');
+  if(!('serviceWorker' in navigator))return toast('Aquí no hay actualizaciones automáticas.');
+  b.disabled=true;const antes=b.textContent;b.textContent='Mirando…';
+  try{
+    const reg=await navigator.serviceWorker.getRegistration();
+    if(!reg)toast('Ábrela desde el icono de la pantalla de inicio.');
+    else{
+      await reg.update();
+      if(reg.waiting){reg.waiting.postMessage('saltar-espera');toast('Actualizando…');}
+      else toast('Ya tienes la última ('+APP_VER+').');
+    }
+  }catch(e){toast('No se pudo comprobar.');}
+  finally{b.disabled=false;b.textContent=antes;}
+}
+
 /* ===================== MISC ===================== */
 let toastT=0;
 function toast(msg){
@@ -2033,7 +2084,7 @@ window.addEventListener('resize',()=>{clearTimeout(rsT);rsT=setTimeout(renderTim
   renderTimeline();drawFrame(playhead);updateBar();
   renderDiag();
   capsReady.then(renderDiag);
-  if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
+  arrancarSW();
   if(navigator.storage&&navigator.storage.persist){
     navigator.storage.persisted().then(ya=>ya?null:navigator.storage.persist()).catch(()=>{});
   }
