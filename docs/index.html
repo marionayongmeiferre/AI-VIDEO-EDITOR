@@ -231,6 +231,8 @@ body.tp-on{overflow:hidden;}
 .stagebar .mvol{flex:1;accent-color:var(--lime);min-width:0;}
 .stagebar .btn{padding:7px 11px;font-size:var(--t-xs);min-height:0;}
 .stagebar .btn[aria-pressed=true]{border-color:var(--magenta);color:var(--magenta);}
+.sblk-mic{position:absolute;top:2px;right:4px;font-size:9px;color:var(--magenta);
+  text-shadow:0 1px 3px #000;pointer-events:none;line-height:1;}
 .sblk-warn{border-color:var(--accent)!important;background:rgba(210,65,15,.2)!important;}
 .sblk-warn .sblk-t{color:#ff9d6e;}
 .blk-mute{position:absolute;top:2px;right:4px;font-size:8px;font-weight:800;color:var(--accent);text-shadow:0 1px 3px #000;pointer-events:none;}
@@ -367,7 +369,7 @@ body.tp-on{overflow:hidden;}
 
       <section class="section lockable" id="secVoz">
         <div class="step"><span class="step-n">5</span><h2 class="section-title">Voz en off</h2></div>
-        <p class="section-hint">El guión se desplaza solo al ritmo del reel. Tú solo lees.</p>
+        <p class="section-hint">Toca un <b>subtítulo</b> en la línea de tiempo para grabar solo esa frase. O graba el reel entero del tirón aquí abajo.</p>
         <div class="btn-row">
           <button class="btn btn-record" style="flex:1" id="voRecBtn">Grabar voz en off</button>
           <button class="btn btn-sm hidden" id="voDel">Borrar</button>
@@ -377,6 +379,7 @@ body.tp-on{overflow:hidden;}
           <span class="dur-val" id="voVolV">100%</span>
           <button class="btn btn-sm" id="voMute">Silenciar</button>
         </div>
+        <div class="note" id="voCount"></div>
         <div class="note" id="voNote" role="status"></div>
       </section>
 
@@ -421,7 +424,7 @@ body.tp-on{overflow:hidden;}
 const BRAND={lime:'#CCFF00',magenta:'#FF1B6B',paper:'#f6f1e9',accent:'#d2410f'};
 const SWATCHES=[BRAND.lime,BRAND.magenta,BRAND.paper,BRAND.accent,'#00E5FF','#FFFFFF'];
 const CAP_FONT='Montserrat';
-const APP_VER='2026-09-11.2';
+const APP_VER='2026-09-11.3';
 /* Lo que la interfaz de Instagram tapa, en proporcion (src/theme.ts sobre 1080x1920) */
 const SAFE={top:220/1920,bottom:420/1920,side:90/1080};
 const DL_LIMIT=16*1024*1024, DL_TARGET=13.5*1024*1024;
@@ -528,6 +531,10 @@ const round2=v=>Math.round(v*100)/100;
 const totalDur=()=>state.clips.reduce((a,c)=>a+c.d,0);
 const filledCount=()=>state.clips.reduce((n,_,i)=>n+(media[i]?1:0),0);
 const clipStart=i=>{let a=0;for(let k=0;k<i;k++)a+=state.clips[k].d;return a;};
+/* Cada subtitulo lleva id propio: la voz grabada se guarda con ese id, no
+   con su posicion, para que al mover el bloque la voz se vaya con el. */
+let _idSeq=0;
+const nuevoId=()=>'s'+Date.now().toString(36)+(_idSeq++).toString(36);
 const clipIn=c=>(c&&typeof c.in==='number'&&isFinite(c.in))?c.in:0;
 const clipVol=c=>{
   if(!c||c.mute)return 0;
@@ -544,6 +551,11 @@ function normalizar(){
   }
   if(typeof state.masterVol!=='number'||!isFinite(state.masterVol))state.masterVol=1;
   if(typeof state.guides!=='boolean')state.guides=true;
+  for(const x of state.subs){
+    if(!x.id)x.id=nuevoId();
+    if(typeof x.voVol!=='number'||!isFinite(x.voVol))x.voVol=1;
+    x.voMute=!!x.voMute;
+  }
   if(!state.vo||typeof state.vo!=='object')state.vo={vol:1,mute:false};
   if(typeof state.vo.vol!=='number'||!isFinite(state.vo.vol))state.vo.vol=1;
   state.vo.mute=!!state.vo.mute;
@@ -564,7 +576,7 @@ function loadTemplate(key){
   const t=TEMPLATES[key];
   state.tpl=key;
   state.clips=t.clips.map(c=>({d:c.d,note:c.note,in:0,vol:1,mute:false}));
-  state.subs=t.subs.map(s=>({t:s.t,s:s.s,d:s.d}));
+  state.subs=t.subs.map(s=>({t:s.t,s:s.s,d:s.d,id:nuevoId(),voVol:1,voMute:false}));
   selKind='clip';selIdx=0;
 }
 /* which clips a caption passes over — the thing she wanted made explicit */
@@ -866,6 +878,7 @@ function tick(){
   playhead=t;
   const{i,local}=clipAt(t);
   syncClipVideo(i,local);
+  syncVoz(t);
   drawFrame(t,exporting);updateBar();
   rafId=requestAnimationFrame(tick);
 }
@@ -874,6 +887,7 @@ function startPlayback(){
   if(playhead>=totalDur()-0.02)playhead=0;
   playing=true;startOffset=playhead;startPerf=performance.now();curClip=-1;
   const{i,local}=clipAt(playhead);syncClipVideo(i,local);
+  syncVoz(playhead);
   if(voEl&&!grabandoVoz&&voVol()>0){
     try{voEl.currentTime=Math.min(playhead,voEl.duration||playhead);
         voEl.volume=Math.min(1,voVol());voEl.play().catch(()=>{});}catch(e){}
@@ -885,6 +899,7 @@ function startPlayback(){
 function stopPlayback(){
   playing=false;cancelAnimationFrame(rafId);
   if(voEl)try{voEl.pause();}catch(e){}
+  pararVoces();
   const m=media[curClip];
   if(m&&m.kind==='video')try{m.el.pause();}catch(e){}
   curClip=-1;
@@ -980,6 +995,11 @@ function renderTimeline(){
     b.setAttribute('aria-current',String(selKind==='sub'&&selIdx===i));
     b.setAttribute('aria-label','Texto: '+s.t);
     if(s.d>0&&wordsOf(s.t).length/s.d>2.8)b.classList.add('sblk-warn');
+    if(s.id&&voMedia[s.id]){
+      const mic=document.createElement('span');mic.className='sblk-mic';mic.textContent='●';
+      mic.title='tiene voz grabada';
+      b.appendChild(mic);
+    }
     b.title=s.t;
     const tx=document.createElement('span');tx.className='sblk-t';tx.textContent=s.t||'(vacío)';
     const hl=document.createElement('span');hl.className='sblk-h l';
@@ -1234,6 +1254,46 @@ function renderSubEditor(box){
   }
   renderSpans();
 
+  /* grabar la voz de ESTA frase */
+  const vozF=document.createElement('div');vozF.className='field';vozF.style.marginTop='11px';
+  const vzl=document.createElement('label');vzl.className='lbl';vzl.textContent='Voz de esta frase';
+  const vzr=document.createElement('div');vzr.className='btn-row';
+  const tieneV=!!(s.id&&voMedia[s.id]);
+  const grab=document.createElement('button');
+  grab.className='btn btn-sm '+(tieneV?'':'btn-record');grab.type='button';
+  grab.textContent=tieneV?'Regrabar':'Grabar esta frase';
+  grab.addEventListener('click',()=>grabarVoz(s));
+  vzr.appendChild(grab);
+  if(tieneV){
+    const bor=document.createElement('button');bor.className='btn btn-sm';bor.type='button';
+    bor.textContent='Borrar voz';
+    bor.addEventListener('click',()=>{
+      borrarVozSub(s.id);renderTimeline();renderEditor();renderVoz();toast('Voz borrada.');
+    });
+    vzr.appendChild(bor);
+  }
+  const vzn=document.createElement('div');vzn.className='note hidden';vzn.id='voNoteSub';
+  vozF.append(vzl,vzr);
+  if(tieneV){
+    const vrow=document.createElement('div');vrow.className='dur-row';vrow.style.marginTop='9px';
+    const vr=document.createElement('input');
+    Object.assign(vr,{type:'range',min:'0',max:'1.5',step:'0.05',value:String(s.voVol==null?1:s.voVol)});
+    const vv=document.createElement('span');vv.className='dur-val';
+    const vm=document.createElement('button');vm.className='btn btn-sm';vm.type='button';
+    const pintaV=()=>{
+      vv.textContent=s.voMute?'muda':Math.round((s.voVol==null?1:s.voVol)*100)+'%';
+      vm.textContent=s.voMute?'Activar':'Silenciar';
+      vr.disabled=!!s.voMute;
+    };
+    pintaV();
+    vr.addEventListener('input',()=>{s.voVol=parseFloat(vr.value);pintaV();});
+    vr.addEventListener('change',save);
+    vm.addEventListener('click',()=>{s.voMute=!s.voMute;pintaV();save();});
+    vrow.append(vr,vv,vm);
+    vozF.appendChild(vrow);
+  }
+  vozF.appendChild(vzn);
+
   const acts=document.createElement('div');acts.className='btn-row';acts.style.marginTop='11px';
   const split=document.createElement('button');split.className='btn btn-sm';split.type='button';
   split.textContent='Partir en 2';
@@ -1242,7 +1302,7 @@ function renderSubEditor(box){
     const ws=s.t.trim().split(/\s+/);
     const half=Math.max(1,Math.round(ws.length/2));
     const nd=round2(s.d/2);
-    const b={t:ws.slice(half).join(' '),s:round2(s.s+nd),d:round2(s.d-nd)};
+    const b={t:ws.slice(half).join(' '),s:round2(s.s+nd),d:round2(s.d-nd),id:nuevoId(),voVol:1,voMute:false};
     s.t=ws.slice(0,half).join(' ');s.d=nd;
     state.subs.splice(selIdx+1,0,b);
     sortSubs();renderTimeline();renderEditor();save();
@@ -1257,19 +1317,20 @@ function renderSubEditor(box){
   const del=document.createElement('button');del.className='btn btn-sm';del.type='button';
   del.textContent='Eliminar';
   del.addEventListener('click',()=>{
+    if(s.id)borrarVozSub(s.id);
     state.subs.splice(selIdx,1);
     selIdx=Math.max(0,selIdx-1);
     if(!state.subs.length){selKind='clip';selIdx=0;}
     renderTimeline();renderEditor();drawFrame(playhead);save();
   });
   acts.append(split,fit,del);
-  box.append(head,txF,startF,durF,spans,leg,acts);
+  box.append(head,txF,startF,durF,spans,leg,vozF,acts);
 }
 
 $('addSubBtn').addEventListener('click',()=>{
   const tot=totalDur();
   const start=clamp(round2(playhead),0,Math.max(0,tot-MIN_SUB));
-  state.subs.push({t:'Nuevo texto',s:start,d:Math.min(2,tot-start)});
+  state.subs.push({t:'Nuevo texto',s:start,d:Math.min(2,tot-start),id:nuevoId(),voVol:1,voMute:false});
   sortSubs();
   selKind='sub';selIdx=state.subs.findIndex(x=>x.s===start&&x.t==='Nuevo texto');
   renderTimeline();renderEditor();drawFrame(playhead);save();
@@ -1347,7 +1408,7 @@ wmSw.addEventListener('click',()=>{
 $('wmHandle').addEventListener('input',e=>{state.wm.handle=e.target.value;drawFrame(playhead);save();});
 $('ideaBox').addEventListener('input',e=>{state.idea=e.target.value;save();});
 $('updBtn').addEventListener('click',buscarActualizacion);
-$('voRecBtn').addEventListener('click',empezarVoz);
+$('voRecBtn').addEventListener('click',()=>grabarVoz(null));
 $('tpStop').addEventListener('click',()=>pararVoz(true));
 $('tpCancel').addEventListener('click',()=>pararVoz(false));
 $('voDel').addEventListener('click',async()=>{
@@ -1477,41 +1538,66 @@ $('aiBtn').addEventListener('click',async()=>{
 });
 
 
+
 /* ===================== VOZ EN OFF + TELEPROMPTER =====================
-   Graba su voz mientras el guion se desplaza solo al ritmo de la linea de
-   tiempo. Como los subtitulos ya tienen su propio momento y duracion, el
-   teleprompter no necesita velocidad: va pegado al reloj del reel, asi que
-   lo que graba encaja con lo que se vera.
-   El audio se guarda en IndexedDB junto a los clips y se mezcla al exportar. */
-let voBlob=null,voEl=null,voRec=null,voChunks=[],grabandoVoz=false,voStream=null;
+   Dos maneras de poner voz, con el MISMO mecanismo de grabacion:
+     - por frase: tocas un subtitulo y grabas solo ese trozo. Si sale mal
+       se regraba ese y ya, sin repetir el reel entero.
+     - todo seguido: el guion se desplaza y lees del tirON.
+   Cada grabacion de frase se guarda con el id del subtitulo, no con su
+   posicion, para que al mover el bloque en la linea de tiempo la voz se
+   vaya con el. */
+let voBlob=null,voEl=null;                    /* la pista de "todo seguido" */
+const voMedia=Object.create(null);            /* id de subtitulo -> {blob, el} */
+let voRec=null,voChunks=[],voStream=null,grabandoVoz=false,voDestino=null,voFin=0;
 
 function voVol(){
   if(!state.vo||state.vo.mute)return 0;
   const v=(typeof state.vo.vol==='number'&&isFinite(state.vo.vol))?state.vo.vol:1;
   return Math.max(0,Math.min(2,v));
 }
+function voVolDe(s){
+  if(!s||s.voMute)return 0;
+  const v=(typeof s.voVol==='number'&&isFinite(s.voVol))?s.voVol:1;
+  return Math.max(0,Math.min(2,v));
+}
 function tieneVoz(){return !!voBlob;}
+const subPorId=id=>state.subs.find(x=>x.id===id)||null;
 
-async function cargarVoz(blob){
-  if(voEl){try{voEl.pause();URL.revokeObjectURL(voEl.src);}catch(e){}}
-  voBlob=blob||null;
-  voEl=null;
-  if(!blob)return;
+async function audioDesde(blob){
   const url=URL.createObjectURL(blob);
-  voEl=document.createElement('audio');
-  voEl.src=url;voEl.preload='auto';
+  const el=document.createElement('audio');
+  el.src=url;el.preload='auto';
   await new Promise(r=>{
     const ok=()=>r();
-    voEl.addEventListener('loadedmetadata',ok,{once:true});
-    voEl.addEventListener('error',ok,{once:true});
+    el.addEventListener('loadedmetadata',ok,{once:true});
+    el.addEventListener('error',ok,{once:true});
     setTimeout(ok,4000);
   });
+  return el;
+}
+async function cargarVoz(blob){
+  if(voEl){try{voEl.pause();URL.revokeObjectURL(voEl.src);}catch(e){}}
+  voBlob=blob||null;voEl=null;
+  if(!blob)return;
+  voEl=await audioDesde(blob);
   voEl.volume=Math.min(1,voVol());
+}
+async function cargarVozSub(id,blob){
+  const v=voMedia[id];
+  if(v){try{v.el.pause();URL.revokeObjectURL(v.el.src);}catch(e){}delete voMedia[id];}
+  if(!blob)return;
+  voMedia[id]={blob,el:await audioDesde(blob)};
+}
+function borrarVozSub(id){
+  const v=voMedia[id];
+  if(v){try{v.el.pause();URL.revokeObjectURL(v.el.src);}catch(e){}delete voMedia[id];}
+  dbDel('vo-'+id);
 }
 
 function mimeVoz(){
-  const opciones=['audio/mp4','audio/webm;codecs=opus','audio/webm','audio/aac'];
-  for(const m of opciones)if(window.MediaRecorder&&MediaRecorder.isTypeSupported(m))return m;
+  for(const m of ['audio/mp4','audio/webm;codecs=opus','audio/webm','audio/aac'])
+    if(window.MediaRecorder&&MediaRecorder.isTypeSupported(m))return m;
   return '';
 }
 
@@ -1519,13 +1605,20 @@ function mimeVoz(){
 function tpTexto(t){
   const s=subAt(t);
   let sig=null,mejor=Infinity;
-  for(const x of state.subs){
-    if(x.s>t&&x.s-t<mejor){mejor=x.s-t;sig=x;}
-  }
-  return {ahora:s?s.t:'',siguiente:sig?sig.t:''};
+  for(const x of state.subs)if(x.s>t&&x.s-t<mejor){mejor=x.s-t;sig=x;}
+  return{ahora:s?s.t:'',siguiente:sig?sig.t:''};
 }
 function limpiaAsteriscos(x){return (x||'').replace(/\*/g,'');}
 function pintaTp(t){
+  if(voDestino){
+    /* grabando una sola frase: se queda fija, sin pasar a la siguiente */
+    $('tpNow').textContent=limpiaAsteriscos(voDestino.t)||'…';
+    $('tpNext').textContent='';
+    const fin=voDestino.s+voDestino.d;
+    $('tpBar').style.width=Math.min(100,Math.max(0,(t-voDestino.s)/(voDestino.d||1)*100))+'%';
+    $('tpTime').textContent=Math.max(0,Math.ceil(fin-t))+'s';
+    return;
+  }
   const{ahora,siguiente}=tpTexto(t);
   $('tpNow').textContent=limpiaAsteriscos(ahora)||'…';
   $('tpNext').textContent=limpiaAsteriscos(siguiente);
@@ -1534,58 +1627,58 @@ function pintaTp(t){
   $('tpTime').textContent=Math.max(0,Math.ceil(total-t))+'s';
 }
 
-async function empezarVoz(){
+/* Un solo camino de grabacion: sub=null graba el reel entero, sub=objeto
+   graba solo ese trozo. */
+async function grabarVoz(sub){
   if(grabandoVoz||exporting)return;
-  const note=$('voNote');
-  note.className='note';note.textContent='';
-  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
-    note.className='note note-warn';note.textContent='Este navegador no da acceso al micrófono.';return;
-  }
-  if(!window.MediaRecorder){
-    note.className='note note-warn';note.textContent='Este navegador no puede grabar audio.';return;
-  }
+  const note=sub?$('voNoteSub'):$('voNote');
+  const aviso=(cls,txt)=>{if(note){note.className='note '+cls;note.textContent=txt;note.classList.remove('hidden');}};
+  if(note){note.className='note';note.textContent='';}
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)
+    return aviso('note-warn','Este navegador no da acceso al micrófono.');
+  if(!window.MediaRecorder)
+    return aviso('note-warn','Este navegador no puede grabar audio.');
   try{
     voStream=await navigator.mediaDevices.getUserMedia({
-      audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}
-    });
+      audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
   }catch(e){
-    note.className='note note-warn';
-    note.textContent=(e&&e.name==='NotAllowedError')
+    return aviso('note-warn',(e&&e.name==='NotAllowedError')
       ?'No has dado permiso al micrófono. Ajustes → Safari → Micrófono.'
-      :'No se pudo abrir el micrófono.';
-    return;
+      :'No se pudo abrir el micrófono.');
   }
   const mime=mimeVoz();
   try{voRec=mime?new MediaRecorder(voStream,{mimeType:mime}):new MediaRecorder(voStream);}
-  catch(e){
-    note.className='note note-warn';note.textContent='Este navegador no puede grabar audio.';
-    soltarMicro();return;
-  }
+  catch(e){soltarMicro();return aviso('note-warn','Este navegador no puede grabar audio.');}
   voChunks=[];
   voRec.ondataavailable=e=>{if(e.data.size>0)voChunks.push(e.data);};
 
-  /* cuenta atras antes de empezar, que si no siempre se pierde la primera palabra */
+  voDestino=sub||null;
+  voFin=sub?(sub.s+sub.d):totalDur();
   $('tp').hidden=false;
   document.body.classList.add('tp-on');
-  stopPlayback();playhead=0;curClip=-1;
-  pintaTp(0);
-  for(let n=3;n>0;n--){
-    $('tpCount').textContent=String(n);
+  stopPlayback();
+  playhead=sub?sub.s:0;curClip=-1;
+  pintaTp(playhead);
+
+  /* cuenta atras: sin ella siempre se pierde la primera palabra */
+  for(let k=3;k>0;k--){
+    $('tpCount').textContent=String(k);
     await sleep(700);
-    if(!$('tp').hidden===false)break;
+    if($('tp').hidden){soltarMicro();voDestino=null;return;}
   }
   $('tpCount').textContent='';
 
   grabandoVoz=true;
-  applyVolAll();                 /* los clips se callan para que no se cuelen en el micro */
+  applyVolAll();               /* los clips se callan para no colarse por el micro */
   voRec.start(200);
-  usage('voz_start',{seg:Math.round(totalDur())});
+  usage('voz_start',{modo:sub?'frase':'entero',seg:Math.round(sub?sub.d:totalDur())});
   startPlayback();
   bucleTp();
 }
 function bucleTp(){
   if(!grabandoVoz)return;
   pintaTp(playhead);
+  if(playhead>=voFin-0.02){pararVoz(true);return;}   /* se para sola al acabar el tramo */
   requestAnimationFrame(bucleTp);
 }
 function soltarMicro(){
@@ -1594,10 +1687,11 @@ function soltarMicro(){
 async function pararVoz(guardar){
   if(!grabandoVoz)return;
   grabandoVoz=false;
+  const sub=voDestino;
+  voDestino=null;
   stopPlayback();
   $('tp').hidden=true;
   document.body.classList.remove('tp-on');
-  const note=$('voNote');
   try{
     await new Promise(res=>{
       if(!voRec||voRec.state==='inactive')return res();
@@ -1606,26 +1700,56 @@ async function pararVoz(guardar){
   }catch(e){}
   soltarMicro();
   applyVolAll();
+  const note=sub?$('voNoteSub'):$('voNote');
   if(!guardar||!voChunks.length){
     voChunks=[];
-    note.className='note';note.textContent='Grabación descartada.';
-    renderVoz();return;
+    if(note){note.className='note';note.textContent='Grabación descartada.';}
+    renderVoz();renderEditor();return;
   }
   const blob=new Blob(voChunks,{type:voChunks[0].type||'audio/mp4'});
   voChunks=[];
-  await cargarVoz(blob);
-  dbPut('vo',blob);
-  state.vo=state.vo||{vol:1,mute:false};
-  save();renderVoz();
-  note.className='note note-ok';
-  note.textContent='Voz grabada ('+(blob.size/1024/1024).toFixed(1)+' MB).';
-  toast('Voz en off lista.');
-  usage('voz_ok',{mb:+(blob.size/1048576).toFixed(2)});
+  const mb=(blob.size/1048576).toFixed(1);
+  if(sub){
+    await cargarVozSub(sub.id,blob);
+    dbPut('vo-'+sub.id,blob);
+    toast('Frase grabada.');
+  }else{
+    await cargarVoz(blob);
+    dbPut('vo',blob);
+    state.vo=state.vo||{vol:1,mute:false};
+    toast('Voz en off lista.');
+  }
+  save();renderVoz();renderTimeline();renderEditor();
+  if(note){note.className='note note-ok';note.textContent='Grabado ('+mb+' MB).';}
+  usage('voz_ok',{modo:sub?'frase':'entero',mb:+mb});
+}
+
+/* --- que suene lo grabado mientras se ve la vista previa --- */
+let voSonando=null;
+function syncVoz(t){
+  if(grabandoVoz)return;
+  const s=subAt(t);
+  const id=(s&&s.id&&voMedia[s.id]&&voVolDe(s)>0)?s.id:null;
+  if(id===voSonando)return;
+  if(voSonando&&voMedia[voSonando])try{voMedia[voSonando].el.pause();}catch(e){}
+  voSonando=id;
+  if(id&&playing){
+    const el=voMedia[id].el;
+    try{
+      el.currentTime=Math.max(0,Math.min(t-s.s,(el.duration||0)));
+      el.volume=Math.min(1,voVolDe(s));
+      el.play().catch(()=>{});
+    }catch(e){}
+  }
+}
+function pararVoces(){
+  if(voSonando&&voMedia[voSonando])try{voMedia[voSonando].el.pause();}catch(e){}
+  voSonando=null;
 }
 
 function renderVoz(){
   const hay=tieneVoz();
-  $('voRecBtn').textContent=hay?'Regrabar voz':'Grabar voz en off';
+  $('voRecBtn').textContent=hay?'Regrabar todo seguido':'Grabar todo seguido';
   $('voDel').classList.toggle('hidden',!hay);
   $('voMix').classList.toggle('hidden',!hay);
   if(hay){
@@ -1635,6 +1759,8 @@ function renderVoz(){
     $('voMute').textContent=v.mute?'Activar':'Silenciar';
     $('voVol').disabled=!!v.mute;
   }
+  const n=state.subs.filter(s=>s.id&&voMedia[s.id]).length;
+  $('voCount').textContent=n?(n+' de '+state.subs.length+' frases con voz propia'):'';
 }
 
 /* ===================== EXPORT =====================
@@ -1764,7 +1890,31 @@ async function buildAudioBuffer(total){
     }
     at+=d;
   }
-  /* la voz en off va encima de todo, desde el segundo cero */
+  /* la voz grabada frase a frase, cada una en su sitio */
+  for(const sb of state.subs){
+    const v=sb.id&&voMedia[sb.id];
+    const g=voVolDe(sb);
+    if(!v||g<=0)continue;
+    try{
+      const ab=await v.blob.arrayBuffer();
+      const buf=await new Promise((res,rej)=>{
+        const p=tmp.decodeAudioData(ab,res,rej);
+        if(p&&p.then)p.then(res,rej);
+      });
+      if(buf&&buf.duration>0.02){
+        const src=off.createBufferSource();
+        src.buffer=buf;
+        const gain=off.createGain();
+        gain.gain.value=g;
+        src.connect(gain);gain.connect(off.destination);
+        /* se corta a la duracion del bloque: si se paso grabando, no invade la siguiente */
+        src.start(Math.min(sb.s,total),0,Math.min(sb.d,buf.duration));
+        any=true;
+      }
+    }catch(e){}
+  }
+
+  /* la voz en off de "todo seguido" va encima, desde el segundo cero */
   if(voBlob&&voVol()>0){
     try{
       const ab=await voBlob.arrayBuffer();
@@ -2061,13 +2211,19 @@ window.addEventListener('resize',()=>{clearTimeout(rsT);rsT=setTimeout(renderTim
   const blobs=await dbAll();
   let restored=0;
   for(const key in blobs){
-    if(key==='logo'||key==='vo')continue;
+    if(key==='logo'||key==='vo'||key.indexOf('vo-')===0)continue;
     const i=parseInt(key.slice(5),10);
     if(Number.isInteger(i)&&i>=0&&i<state.clips.length){
       try{await attachMedia(i,blobs[key],true);restored++;}catch(e){}
     }
   }
   if(blobs.vo){try{await cargarVoz(blobs.vo);}catch(e){}}
+  for(const key in blobs){
+    if(key.indexOf('vo-')!==0)continue;
+    const id=key.slice(3);
+    if(subPorId(id)){try{await cargarVozSub(id,blobs[key]);}catch(e){}}
+    else dbDel(key);                 /* de un subtitulo que ya no existe */
+  }
   renderVoz();
   if(state.wm.hasLogo&&blobs.logo){
     const url=URL.createObjectURL(blobs.logo);
