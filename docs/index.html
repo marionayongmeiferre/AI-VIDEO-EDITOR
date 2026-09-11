@@ -424,7 +424,7 @@ body.tp-on{overflow:hidden;}
 const BRAND={lime:'#CCFF00',magenta:'#FF1B6B',paper:'#f6f1e9',accent:'#d2410f'};
 const SWATCHES=[BRAND.lime,BRAND.magenta,BRAND.paper,BRAND.accent,'#00E5FF','#FFFFFF'];
 const CAP_FONT='Montserrat';
-const APP_VER='2026-09-11.4';
+const APP_VER='2026-09-11.5';
 /* Lo que la interfaz de Instagram tapa, en proporcion (src/theme.ts sobre 1080x1920) */
 const SAFE={top:220/1920,bottom:420/1920,side:90/1080};
 const DL_LIMIT=16*1024*1024, DL_TARGET=13.5*1024*1024;
@@ -535,6 +535,11 @@ const clipStart=i=>{let a=0;for(let k=0;k<i;k++)a+=state.clips[k].d;return a;};
    con su posicion, para que al mover el bloque la voz se vaya con el. */
 let _idSeq=0;
 const nuevoId=()=>'s'+Date.now().toString(36)+(_idSeq++).toString(36);
+const clipDark=c=>{
+  if(!c)return 0;
+  const d=(typeof c.dark==='number'&&isFinite(c.dark))?c.dark:0;
+  return Math.max(0,Math.min(1,d));
+};
 const clipIn=c=>(c&&typeof c.in==='number'&&isFinite(c.in))?c.in:0;
 const clipVol=c=>{
   if(!c||c.mute)return 0;
@@ -547,6 +552,7 @@ function normalizar(){
   for(const c of state.clips){
     if(typeof c.in!=='number'||!isFinite(c.in)||c.in<0)c.in=0;
     if(typeof c.vol!=='number'||!isFinite(c.vol))c.vol=1;
+    if(typeof c.dark!=='number'||!isFinite(c.dark)||c.dark<0||c.dark>1)c.dark=0;
     c.mute=!!c.mute;
   }
   if(typeof state.masterVol!=='number'||!isFinite(state.masterVol))state.masterVol=1;
@@ -575,7 +581,7 @@ function applyVolAll(){for(let i=0;i<state.clips.length;i++)applyVol(i);}
 function loadTemplate(key){
   const t=TEMPLATES[key];
   state.tpl=key;
-  state.clips=t.clips.map(c=>({d:c.d,note:c.note,in:0,vol:1,mute:false}));
+  state.clips=t.clips.map(c=>({d:c.d,note:c.note,in:0,vol:1,mute:false,dark:0}));
   state.subs=t.subs.map(s=>({t:s.t,s:s.s,d:s.d,id:nuevoId(),voVol:1,voMute:false}));
   selKind='clip';selIdx=0;
 }
@@ -823,6 +829,8 @@ function drawFrame(t,forExport){
     ctx.fillStyle='rgba(246,241,233,.16)';
     ctx.fillText(state.clips[i].note||'',W/2,H*0.17+Math.round(W*0.05));
   }
+  const oscuro=clipDark(state.clips[i]);
+  if(oscuro>0){ctx.fillStyle='rgba(0,0,0,'+oscuro+')';ctx.fillRect(0,0,W,H);}
   drawWatermark(drawSubtitle(t));
   if(!forExport&&state.guides)drawGuides();
 }
@@ -1167,6 +1175,25 @@ function renderClipEditor(box){
       ?'El vídeo dura '+dur.toFixed(1)+'s y el hueco '+c.d.toFixed(1)+'s: puedes moverlo hasta '+margen.toFixed(1)+'s.'
       :'El vídeo ('+dur.toFixed(1)+'s) no da más de sí que el hueco.';
     trimF.append(tl2,row2,h2);
+
+    const dl2=document.createElement('label');dl2.className='lbl';dl2.textContent='Oscurecer el fondo';
+    const rowD=document.createElement('div');rowD.className='dur-row';
+    const rd=document.createElement('input');
+    Object.assign(rd,{type:'range',min:'0',max:'1',step:'0.01',value:String(clipDark(c))});
+    const vd=document.createElement('span');vd.className='dur-val';
+    const pintaDark=()=>{vd.textContent=Math.round(clipDark(c)*100)+'%';};
+    pintaDark();
+    rd.addEventListener('input',()=>{c.dark=parseFloat(rd.value);pintaDark();drawFrame(playhead);});
+    rd.addEventListener('change',save);
+    const todos=document.createElement('button');todos.className='btn btn-sm';todos.type='button';
+    todos.textContent='A todos';
+    todos.addEventListener('click',()=>{
+      const v=clipDark(c);
+      for(const x of state.clips)x.dark=v;
+      save();drawFrame(playhead);toast('Oscurecido al '+Math.round(v*100)+'% en todos.');
+    });
+    rowD.append(rd,vd,todos);
+    trimF.append(dl2,rowD);
 
     const vl=document.createElement('label');vl.className='lbl';vl.textContent='Volumen del clip';
     const row3=document.createElement('div');row3.className='dur-row';
