@@ -424,7 +424,7 @@ body.tp-on{overflow:hidden;}
 const BRAND={lime:'#CCFF00',magenta:'#FF1B6B',paper:'#f6f1e9',accent:'#d2410f'};
 const SWATCHES=[BRAND.lime,BRAND.magenta,BRAND.paper,BRAND.accent,'#00E5FF','#FFFFFF'];
 const CAP_FONT='Montserrat';
-const APP_VER='2026-09-11.3';
+const APP_VER='2026-09-11.4';
 /* Lo que la interfaz de Instagram tapa, en proporcion (src/theme.ts sobre 1080x1920) */
 const SAFE={top:220/1920,bottom:420/1920,side:90/1080};
 const DL_LIMIT=16*1024*1024, DL_TARGET=13.5*1024*1024;
@@ -1006,7 +1006,7 @@ function renderTimeline(){
     const hr=document.createElement('span');hr.className='sblk-h r';
     b.append(tx,hl,hr);
     b.addEventListener('click',()=>{
-      if(dragMoved)return;
+      if(dragMoved||seleccionadoAlSoltar)return;   /* ya se hizo al soltar */
       selKind='sub';selIdx=i;renderTimeline();renderEditor();seekTo(s.s);
     });
     hl.addEventListener('pointerdown',e=>beginDrag(e,i,'l'));
@@ -1039,11 +1039,16 @@ function beginDrag(e,i,mode){
   e.currentTarget.setPointerCapture&&e.currentTarget.setPointerCapture(e.pointerId);
   e.preventDefault();
 }
+window.addEventListener('pointercancel',()=>{
+  if(!drag)return;
+  drag=null;dragMoved=false;
+  sortSubs();renderTimeline();renderEditor();save();
+});
 window.addEventListener('pointermove',e=>{
   if(!drag)return;
   const s=state.subs[drag.i];if(!s)return;
   const dt=(e.clientX-drag.x0)/pps();
-  if(Math.abs(e.clientX-drag.x0)>3)dragMoved=true;
+  if(Math.abs(e.clientX-drag.x0)>8)dragMoved=true;   /* con el dedo, 3px se pasan solos */
   const tot=totalDur();
   if(drag.mode==='move'){
     s.s=clamp(round2(snap(drag.s0+dt)),0,tot-s.d);
@@ -1055,9 +1060,23 @@ window.addEventListener('pointermove',e=>{
   }
   renderTimeline();renderEditor();drawFrame(playhead);
 });
+let seleccionadoAlSoltar=false;
 window.addEventListener('pointerup',()=>{
   if(!drag)return;
-  drag=null;sortSubs();renderTimeline();renderEditor();save();
+  const i=drag.i,movio=dragMoved;
+  drag=null;
+  if(movio){
+    sortSubs();renderTimeline();renderEditor();save();
+  }else{
+    /* toque limpio, sin arrastrar: es una seleccion.
+       Hay que hacerlo aqui porque en movil el click no llega nunca. */
+    const sb=state.subs[i];
+    selKind='sub';selIdx=i;
+    renderTimeline();renderEditor();
+    if(sb)seekTo(sb.s);
+    seleccionadoAlSoltar=true;
+    setTimeout(()=>{seleccionadoAlSoltar=false;},400);
+  }
   setTimeout(()=>{dragMoved=false;},0);
 });
 /* snap to clip cuts so captions can be aligned deliberately, not by accident */
